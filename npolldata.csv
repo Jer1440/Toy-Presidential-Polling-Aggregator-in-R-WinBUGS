@@ -1,0 +1,17 @@
+pollnum,obama,romney,n,type,firm,firmnum,startm,endm,sday,eday
+1,46,42,912,RV,FOX News,1,3,3,10,12
+2,45,47,1500,LV,Rasmussen,2,3,3,12,14
+3,52,41,973,RV,Reuters/Ipsos,3,3,3,8,11
+4,47,47,746,LV,Bloomberg,4,3,3,8,11
+5,54,42,1188,RV,Pew Research,5,3,3,7,11
+6,47,44,878,RV,CBS News/NY Times,6,3,3,7,11
+7,47,49,,RV,ABC News/Wash Post,7,3,3,7,10
+8,46,41,807,RV,IBD/CSM/TIPP,8,3,3,4,11
+9,50,44,,RV,NBC News/Wall St. Jrnl,9,2,3,29,3
+10,53,43,1000,LV,Politico/GWU/Battleground,10,2,2,21,22
+11,47,47,881,RV,USA Today/Gallup,11,2,2,20,21
+12,51,43,1000,A,Associated Press/GfK,12,2,2,16,20
+13,46,50,898,RV,USA Today/Gallup,11,2,2,16,19
+14,48,44,1000,A,YouGov,41,3,3,10,13
+15,54,43,925,RV,CNN/ Opinion Research,45,3,3,24,25
+16,45,44,1500,LV,Rasmussen,2,3,3,25,27

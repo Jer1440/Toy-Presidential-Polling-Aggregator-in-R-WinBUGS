@@ -1,0 +1,55 @@
+model{
+for (i in 1:(Npolls+Spolls)){                    #Loop over individual polls
+	pollo[i] ~ dnorm(mean1[i],tau1[i])       # Democratic % in poll
+	pollr[i] ~ dnorm(mean2[i],tau2[i])       # Republican % in poll 
+
+	mean1[i]<-obamaUSA+ statedo[state[i]] + houseeffect[firmnum[i]]  
+
+						 #Dem% in any poll ~ 'Dem National %' + 'Dem State Deviation from Nat%' + 'Firm House Effect' (+ random noise (tau1 above))
+
+	mean2[i]<-romneyUSA+statedr[state[i]] - houseeffect[firmnum[i]]
+
+						 #Rep% in any poll ~ 'Rep National %' + 'Rep State Deviation from Nat%' + 'Firm House Effect' (+ random noise (tau2 above))
+	tau1[i]<-sig1*n[i]                       
+	tau2[i]<-sig2*n[i]                       #noise related to poll sample size (adds little to model), can be removed.
+}
+for (p in 1:nfirms){
+	houseeffect[p] ~ dnorm(0,tau3)           #Vague Priors on Firm House Effects
+}
+for (j in 1:nstate){                             #Loop over States. statemeano[j] = latent, unobserved Dem vote for state j.  statemeanr = latent, unobserved rep vote.
+	statedo[j] ~ dnorm(statemeano[j],tau4)
+	statedr[j] ~ dnorm(statemeanr[j],tau5)
+	statemeano[j]<-gamma1*obama08[j] + gamma3*kerry04[j] + gamma5*gore00[j]  
+
+						 #'Dem State Deviation from Nat%' = fitted regression on past elections results (or other factors to be added)(+ random noise (tau4 above))
+
+	statemeanr[j]<-gamma2*obama08[j] + gamma4*kerry04[j] + gamma6*gore00[j]
+
+						 #'GOP State Deviation from Nat%' = fitted regression on past elections results (or other factors to be added)(+ random noise (tau5 above))
+	obamapredict[j]<-obamaUSA+statedo[j]     # MCMC draw simulation result for Dem vote %s = 'National Vote %' + 'Dem State Deviation from Nat%'
+	romneypredict[j]<-romneyUSA+statedr[j]   # MCMC draw simulation result for Gop vote %s = 'National Vote %' + 'Rep State Deviation from Nat%'
+
+	votedifstate[j]<-obamapredict[j]-romneypredict[j] 
+					         #State Win Margin for Dem = Result for Dem% - Result for Rep% (To be returned to R)
+}
+obamavote<-obamaUSA                              # Latent National, Unobserved Dem Vote
+romneyvote<-romneyUSA                            # Latent National, Unobserved Gop Vote
+votedif<-obamavote-romneyvote                    # National Margin Result for Draw (To be return to R)
+statedo[52]<-0                                   # Define 'state deviation' for national polls to 0 for above loop
+statedr[52]<-0
+obamaUSA~dnorm(50,.01)                           # Vauge Priors for Latent National Vote, other model parameters
+romneyUSA~dnorm(50,.01)
+tau3~dgamma(.1,.1)
+tau4~dgamma(.1,.1)
+tau5~dgamma(.1,.1)
+sig1~dgamma(.1,.1)
+sig2~dgamma(.1,.1)
+gamma0~dnorm(0,.01)
+gamma1~dnorm(0,.01)
+gamma2~dnorm(0,.01)
+gamma3~dnorm(0,.01)
+gamma4~dnorm(0,.01)
+gamma5~dnorm(0,.01)
+gamma6~dnorm(0,.01)
+gamma7~dnorm(0,.01)
+}

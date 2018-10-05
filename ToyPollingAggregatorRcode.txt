@@ -1,0 +1,286 @@
+#------------------------------------------------------------------------------------------
+#-------Sample R Code for a Toy Presidential Polling Aggregator in R and WinBUGS-----------
+#-----------Note: You may want to load the custom plotting function below, first.----------
+#------------------------------------------------------------------------------------------
+
+#------------------------------------------------------------------------------------------
+#-----------Install the following R packages: car, foreign, arm, MASS, maps, R2WinBUGS-----
+#------------------------------------------------------------------------------------------
+
+library(car)
+library(foreign)
+library(arm)
+library(MASS)
+library(maps)
+library(R2WinBUGS)
+
+#-------------------------------------------------------------------------------------------
+#-----------(Reset the working director below to the directory where the files are located.)
+#-------------------------------------------------------------------------------------------
+
+setwd("c:/Users/profg/Desktop/backup73117/Desktop050115/Article ProjectsII/2008Prediction")
+
+#-------------------------------------------------------------------------------------------
+#-----------'statedata.csv contains a vector of state-level data used in the----------------
+#---------------prediction of state-level election results. In this toy example-------------
+#---------------these are past election percentages for the D and R candidates.-------------
+#-------------------------------------------------------------------------------------------
+
+statedata<-read.csv("statedata.csv",header=T,sep=",")
+obama08<-statedata$obama                   #Obama % in 08
+state<-statedata$state                     #State ID number
+kerry04<-statedata$kerry                   #Kerry % in 04
+gore00<-statedata$gore                     #Gore % in 00
+
+#-------------------------------------------------------------------------------------------
+#-----------'npolldata.csv' contains national presidential poll % results-------------------
+#---------------for both the D and R candidaites.-------------------------------------------
+#-------------------------------------------------------------------------------------------
+#-----------'spolldata.csv' contains state presidential poll % results----------------------
+#---------------for both the D and R candidaites.-------------------------------------------
+#-------------------------------------------------------------------------------------------
+
+npolldata<-read.csv("npolldata.csv",header=T,sep=",")
+spolldata<-read.csv("spolldata.csv",header=T,sep=",")
+natpoll<-npolldata$obama                   #Obama % in Poll
+natpollr<-npolldata$romney                 #Romney % in Poll
+natn<-recode(npolldata$n, 'NA=250')        #n of Poll
+natfirm<-npolldata$firmnum                 #ID number of Polling firm for House Effects
+Npolls<-length(npolldata$obama)            #Total Number of National Polls
+
+satpoll<-spolldata$obama                   #Obama % in Poll
+satpollr<-spolldata$romney                 #Ronmey % in Poll
+satn<-recode(spolldata$n, 'NA=250')        #n of Poll
+satfirm<-spolldata$firmnum                 #ID number of Polling firm for House Effects
+satstate<-spolldata$state                  #ID number of State Polled
+Spolls<-length(spolldata$obama)            #Total Number of State Polls
+firms<-c(natfirm,satfirm)
+
+#---------------------------------------------------------------------------------------------
+#-----This block of code creates a Bugs dataset to be sent to Winbugs.------------------------
+#---------------------------------------------------------------------------------------------
+
+silverdata<-bugs.data(list('nstate'=51,'nfirms'=length(table(firms)),'Npolls'=Npolls,'Spolls'=Spolls,
+'pollo'=c(natpoll,satpoll),'pollr'=c(natpollr,satpollr),'n'=c(natn,satn),
+'firmnum'=c(natfirm,satfirm),'state'=c(rep(52,Npolls),satstate),'obama08'=(c(obama08,0)-52.9),
+'kerry04'=(c(kerry04,0)-48.3),'gore00'=(c(gore00,0)-48.8) ))
+
+#---------------------------------------------------------------------------------------------
+#-----Posterior Parameters for WinBUGS to Save for Post-Estimation Processing.----------------
+#------------'votedif' ~ MCMC Chain for Democratic % Margin of National Vote------------------
+#------------'votedifstate' ~ MCMC Chain for Democratic % Margin of State Votes---------------
+#---------------------------------------------------------------------------------------------
+
+param.sav<-c("votedif","votedifstate")
+
+#---------------------------------------------------------------------------------------------
+#-----Potential Starting Values for MCMC Estimation-------------------------------------------
+#---------------------------------------------------------------------------------------------
+
+silver.inits<-function(){list(sig1=dunif(1,0,1),sig2=dunif(1,0,1),
+tau3=runif(1,0,1),tau4=runif(1,0,1),
+tau5=runif(1,0,1),obamaUSA=rnorm(1,50,1),romneyUSA=rnorm(1,50,1))}
+
+
+#silver.inits3<-function(){list(sig1=dunif(1,0,1),sig2=dunif(1,0,1),
+#tau3=runif(1,0,1),obamaUSA=rnorm(1,50,1),romneyUSA=rnorm(1,50,1))}
+
+#---------------------------------------------------------------------------------------------
+#-----Call WinBUGS to fit the model. Burnin=5000. N.Sims=10000.-------------------------------
+#-----------*Makes Sure ToyModelWinBUGScode.txt is in Working Directory.----------------------
+#-----------*Make Sure WinBUGS is properly installed and change 'bug.directory'---------------
+#-------------to match local location.--------------------------------------------------------
+#---------------------------------------------------------------------------------------------
+
+bugssilver<-bugs(data=silverdata, inits=silver.inits, parameters.to.save=param.sav,
+	model.file="ToyModelWinBUGScode.txt", n.chains=1, n.iter=15000, n.burnin=5000,
+	n.thin=1, bugs.directory="c:/Users/profg/Desktop/WinBUGS14",debug=F,
+	bugs.seed=round(runif(1,0,2000)) )
+
+
+silver<-silver.eval.plots(bugssilver)  #This is the output function defined below.
+                                        # It must be defined/loaded before use.
+
+
+#---------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
+#---------------Code for a graphical function displaying results.-----------------------------
+#---------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------
+
+silver.eval.plots<-function(bugssilver){
+attach(bugssilver)
+
+#---------------------------------------------------------------------------------------------
+#----------------Output a quick coefplot of the state margin estimates first.-----------------
+#---------------------------------------------------------------------------------------------
+
+x11()
+coefplot(bugssilver,var.idx=2:52,varnames=as.character(statedata$statename2),mar=c(1,4,1,1))
+
+#---------------------------------------------------------------------------------------------
+#----------------If the margin is positive, the dem wins that MCMC draw.----------------------
+#--------------------Recode the national/state margins in each draw---------------------------
+#--------------------into 1(=Dem wins) or 0(=Rep wins).---------------------------------------
+#---------------------------------------------------------------------------------------------
+
+probstatewins<-0
+for (i in 1:52){
+	probstatewins[i]<-table(recode(sims.matrix[,i],"lo:0=0;0:hi=1"))["1"]/dim(sims.matrix)[1]
+}
+probstatewins<-recode(probstatewins,'NA=0')
+stateprobs<-as.data.frame(row.names=as.character(statedata$statename2),probstatewins[2:52])
+
+#---------------------------------------------------------------------------------------------
+#----------------In each MCMC simulation draw, count up the number of votes-------------------
+#--------------------the Democrat wins in the electoral college based on winning--------------
+#--------------------indiviudal states in each simulation.-------------------------------------
+#--------------------(Note: This could be written more efficiently in a loop.)----------------
+#---------------------------------------------------------------------------------------------
+
+ECvote<-0
+for (k in 1:dim(sims.matrix)[1]){
+	ECvote[k]<-0
+	if (sims.matrix[k,2]>0) {ECvote[k]<-ECvote[k]+9}
+	if (sims.matrix[k,3]>0) {ECvote[k]<-ECvote[k]+3}
+	if (sims.matrix[k,4]>0) {ECvote[k]<-ECvote[k]+11}
+	if (sims.matrix[k,5]>0) {ECvote[k]<-ECvote[k]+6}
+	if (sims.matrix[k,6]>0) {ECvote[k]<-ECvote[k]+55}
+	if (sims.matrix[k,7]>0) {ECvote[k]<-ECvote[k]+9}
+	if (sims.matrix[k,8]>0) {ECvote[k]<-ECvote[k]+7}
+	if (sims.matrix[k,9]>0) {ECvote[k]<-ECvote[k]+3}
+	if (sims.matrix[k,10]>0) {ECvote[k]<-ECvote[k]+3}
+	if (sims.matrix[k,11]>0) {ECvote[k]<-ECvote[k]+29}
+	if (sims.matrix[k,12]>0) {ECvote[k]<-ECvote[k]+16}
+	if (sims.matrix[k,13]>0) {ECvote[k]<-ECvote[k]+4}
+	if (sims.matrix[k,14]>0) {ECvote[k]<-ECvote[k]+4}
+	if (sims.matrix[k,15]>0) {ECvote[k]<-ECvote[k]+20}
+	if (sims.matrix[k,16]>0) {ECvote[k]<-ECvote[k]+11}
+	if (sims.matrix[k,17]>0) {ECvote[k]<-ECvote[k]+6}
+	if (sims.matrix[k,18]>0) {ECvote[k]<-ECvote[k]+6}
+	if (sims.matrix[k,19]>0) {ECvote[k]<-ECvote[k]+8}
+	if (sims.matrix[k,20]>0) {ECvote[k]<-ECvote[k]+8}
+	if (sims.matrix[k,21]>0) {ECvote[k]<-ECvote[k]+4}
+	if (sims.matrix[k,22]>0) {ECvote[k]<-ECvote[k]+10}
+	if (sims.matrix[k,23]>0) {ECvote[k]<-ECvote[k]+11}
+	if (sims.matrix[k,24]>0) {ECvote[k]<-ECvote[k]+16}
+	if (sims.matrix[k,25]>0) {ECvote[k]<-ECvote[k]+10}
+	if (sims.matrix[k,26]>0) {ECvote[k]<-ECvote[k]+6}
+	if (sims.matrix[k,27]>0) {ECvote[k]<-ECvote[k]+10}
+	if (sims.matrix[k,28]>0) {ECvote[k]<-ECvote[k]+3}
+	if (sims.matrix[k,29]>0) {ECvote[k]<-ECvote[k]+5}
+	if (sims.matrix[k,30]>0) {ECvote[k]<-ECvote[k]+6}
+	if (sims.matrix[k,31]>0) {ECvote[k]<-ECvote[k]+4}
+	if (sims.matrix[k,32]>0) {ECvote[k]<-ECvote[k]+14}
+	if (sims.matrix[k,33]>0) {ECvote[k]<-ECvote[k]+5}
+	if (sims.matrix[k,34]>0) {ECvote[k]<-ECvote[k]+29}
+	if (sims.matrix[k,35]>0) {ECvote[k]<-ECvote[k]+15}
+	if (sims.matrix[k,36]>0) {ECvote[k]<-ECvote[k]+3}
+	if (sims.matrix[k,37]>0) {ECvote[k]<-ECvote[k]+18}
+	if (sims.matrix[k,38]>0) {ECvote[k]<-ECvote[k]+7}
+	if (sims.matrix[k,39]>0) {ECvote[k]<-ECvote[k]+7}
+	if (sims.matrix[k,40]>0) {ECvote[k]<-ECvote[k]+20}
+	if (sims.matrix[k,41]>0) {ECvote[k]<-ECvote[k]+4}
+	if (sims.matrix[k,42]>0) {ECvote[k]<-ECvote[k]+9}
+	if (sims.matrix[k,43]>0) {ECvote[k]<-ECvote[k]+3}
+	if (sims.matrix[k,44]>0) {ECvote[k]<-ECvote[k]+11}
+	if (sims.matrix[k,45]>0) {ECvote[k]<-ECvote[k]+38}
+	if (sims.matrix[k,46]>0) {ECvote[k]<-ECvote[k]+6}
+	if (sims.matrix[k,47]>0) {ECvote[k]<-ECvote[k]+3}
+	if (sims.matrix[k,48]>0) {ECvote[k]<-ECvote[k]+13}
+	if (sims.matrix[k,49]>0) {ECvote[k]<-ECvote[k]+12}
+	if (sims.matrix[k,50]>0) {ECvote[k]<-ECvote[k]+5}
+	if (sims.matrix[k,51]>0) {ECvote[k]<-ECvote[k]+10}
+	if (sims.matrix[k,52]>0) {ECvote[k]<-ECvote[k]+3}
+}
+
+#---------------------------------------------------------------------------------------------
+#----------------Output Summary Stats on Electoral College Simulations------------------------
+#---------------------------------------------------------------------------------------------
+
+sort(ECvote)[.025*dim(sims.matrix)[1]]
+sort(ECvote)[.975*dim(sims.matrix)[1]]
+median(ECvote)
+mean(ECvote)
+
+#---------------------------------------------------------------------------------------------
+#----------------Creat a 2 x 2 plotting grid for graphical console results.-------------------
+#---------------------------------------------------------------------------------------------
+
+x11(width=10,height=7)
+par(mfrow=c(2,2))
+
+#---------------------------------------------------------------------------------------------
+#----------------1. Histogram of D minus R National Vote % Margins in Simulations.------------
+#---------------------------------------------------------------------------------------------
+
+hist(sims.matrix[,1],breaks=50,main="Predicted Obama Win Margin: 10000 Simulations",xlab="Obama - Romney",col="light blue")
+box()
+legend(x='topleft',legend=c("To Win", "2008 Result"),text.col=c("black","dark gray"), bg='white')
+
+abline(v=c(0,7.5),lwd=3,col=c("black","dark gray"))
+
+#---------------------------------------------------------------------------------------------
+#----------------2. Histogram of D Electoral Vote Totals in Simulations.----------------------
+#---------------------------------------------------------------------------------------------
+
+hist(ECvote,breaks=70,xlim=c(200,390),main="Predicted Electoral College Vote: 10000 Simulations",xlab="EC Vote",col="light blue")
+abline(v=c(269,365),col=c("black","dark gray"),lwd=3,)
+box()
+legend(x='topleft',legend=c("To Win", "2008 Result"),text.col=c("black","dark gray"), bg='white')
+
+#---------------------------------------------------------------------------------------------
+#----------------3. Histogram of D D minus R Swing State Vote % Margins in Simulations.-------
+#---------------------------------------------------------------------------------------------
+
+coefplot(bugssilver,var.idx=(c(6,10,16,26,34,36,39,47)+1),varnames=as.character(statedata$statename[c(6,10,16,26,34,36,39,47)]),main="Swing State Obama-Romney Ests.: 10000 Sims.",cex.var=1.2,cex.pts=3)
+box()
+
+#---------------------------------------------------------------------------------------------
+#----------------3. State Map of Electoral College Simulation Results-------------------------
+#---------------------------------------------------------------------------------------------
+
+
+state.to.map <- match.map("state", row.names(stateprobs))
+x <- recode(stateprobs[state.to.map,1],'lo:.05="red";.05:.5="pink";.5:.95="light blue";.95:hi="blue"')
+map("state", fill = TRUE, col = x, mar=c(1,0,3.1,0))
+title(main="Most Likely EC Scenerio: 10000 Sims.")
+
+
+
+print(stateprobs)
+probECObamawin<-table(recode(ECvote,'lo:269=0;270:hi=1'))["1"]/dim(sims.matrix)[1]
+probECtie<-table(recode(ECvote,'269=1;else=0'))["1"]/dim(sims.matrix)[1]
+print("Probability of Obama EC win",quote=F)
+print(probECObamawin)
+print("Probability of EC tie",quote=F)
+print(probECtie)
+
+
+}
+
+#-------------------------------------------------------------------------
+#--------Additional Output: State win probabilities and-------------------
+#------------Electoral College Win Probabilities for use------------------
+#------------in the redesiging the above function.------------------------
+#-------------------------------------------------------------------------
+
+
+
+stateprobs
+table(recode(ECvote,'lo:269=0;270:hi=1'))["1"]/dim(sims.matrix)[1]
+table(recode(ECvote,'269=1;else=0'))["1"]/dim(sims.matrix)[1]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
